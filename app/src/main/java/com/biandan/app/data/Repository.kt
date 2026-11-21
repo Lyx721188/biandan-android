@@ -248,7 +248,7 @@ class Repository(
         if (lists.none { it.listId == "1" }) {
             lists += ListView("1", "未分类", 0, 0)
         }
-        lists.sortedWith(compareBy({ it.sortIndex }, { it.listId.toLongOrNull() ?: 0 }))
+        return lists.sortedWith(compareBy({ it.sortIndex }, { it.listId.toLongOrNull() ?: 0 }))
     }
 
     private suspend fun validateList(listId: String): Int {
