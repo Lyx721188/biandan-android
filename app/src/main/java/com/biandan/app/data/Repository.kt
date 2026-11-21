@@ -500,7 +500,7 @@ class Repository(
         val rows = records("showTask")
         val rec = find("showTask", "id2", occurrenceId, rows)
             ?: throw ToolError("找不到记录：$occurrenceId")
-        val parent = find("Task", "id1", rec.attributes["id1"].toString().trim('"'), rows)
+        val parent = find("Task", "id1", rec.attributes["id1"].toString().trim('"'), rows)!!
         return occurrenceView(rec, parent)
     }
 
