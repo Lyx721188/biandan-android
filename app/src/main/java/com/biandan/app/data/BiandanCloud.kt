@@ -29,7 +29,7 @@ class CloudError(
 class ReauthRequired(message: String) : Exception(message)
 
 /** 需要访问令牌时回调；rejected 传上次被云端拒绝的令牌，用于强制刷新。 */
-fun interface AccessTokenProvider {
+interface AccessTokenProvider {
     suspend fun accessToken(rejected: String? = null): String
 }
 

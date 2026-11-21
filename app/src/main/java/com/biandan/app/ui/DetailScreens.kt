@@ -313,7 +313,7 @@ private fun ActionButtons(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Switch(enabled, { enabled = it }); Spacer(Modifier.width(8.dp)); Text("启用提醒")
                     }
-                    if (enabled) Row { DateField("日期", rd, { rd = it }); TimeField("时间", rt, { rt = it?.take(5) }) }
+                    if (enabled) Row { DateField("日期", rd, { rd = it }); TimeField("时间", rt, { rt = it?.take(5) ?: "09:00" }) }
                 }
             },
             confirmButton = {
@@ -449,9 +449,9 @@ private fun EditTaskDialog(store: AppStore, task: TaskView, onDone: () -> Unit, 
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(remark, { remark = it }, label = { Text("备注") })
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(important, { important = it }, label = { Text("重要") })
-                    FilterChip(urgent, { urgent = it }, label = { Text("紧急") })
-                    FilterChip(collected, { collected = it }, label = { Text("收藏") })
+                    FilterChip(important, { important = !important }, label = { Text("重要") })
+                    FilterChip(urgent, { urgent = !urgent }, label = { Text("紧急") })
+                    FilterChip(collected, { collected = !collected }, label = { Text("收藏") })
                 }
                 Spacer(Modifier.height(8.dp))
                 Text("子任务", fontWeight = FontWeight.Bold)
@@ -614,9 +614,9 @@ fun EditTaskScreen(store: AppStore, onDone: () -> Unit, onCancel: () -> Unit) {
             OutlinedTextField(remark, { remark = it }, Modifier.fillMaxWidth(), label = { Text("备注") })
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(important, { important = it }, label = { Text("重要") })
-                FilterChip(urgent, { urgent = it }, label = { Text("紧急") })
-                FilterChip(habit, { habit = it }, label = { Text("习惯") })
+                FilterChip(important, { important = !important }, label = { Text("重要") })
+                FilterChip(urgent, { urgent = !urgent }, label = { Text("紧急") })
+                FilterChip(habit, { habit = !habit }, label = { Text("习惯") })
             }
 
             Card {
@@ -624,12 +624,10 @@ fun EditTaskScreen(store: AppStore, onDone: () -> Unit, onCancel: () -> Unit) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("清单", Modifier.weight(1f))
                     }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(lists.size) { i ->
-                                val l = lists[i]
-                                FilterChip(listId == l.listId, { listId = l.listId }, label = { Text(l.name) })
-                            }
+                    androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(lists.size) { i ->
+                            val l = lists[i]
+                            FilterChip(listId == l.listId, { listId = l.listId }, label = { Text(l.name) })
                         }
                     }
                 }
@@ -639,10 +637,10 @@ fun EditTaskScreen(store: AppStore, onDone: () -> Unit, onCancel: () -> Unit) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("排定日期", Modifier.weight(1f))
-                        Switch(dated) {
+                        Switch(dated, {
                             dated = it
                             if (!it) { repeatMode = "none"; remindOn = false }
-                        }
+                        })
                     }
                     if (dated) {
                         Row { DateField("开始日", startDate, { startDate = it }); DateField("结束日", endDate, { endDate = it }) }
@@ -655,15 +653,13 @@ fun EditTaskScreen(store: AppStore, onDone: () -> Unit, onCancel: () -> Unit) {
                 Card {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("重复", fontWeight = FontWeight.Bold)
-                        Row(Modifier.fillMaxWidth()) {
-                            androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                items(repeatOptions.size) { i ->
-                                    val (v, label) = repeatOptions[i]
-                                    FilterChip(repeatMode == v, {
-                                        repeatMode = v
-                                        if (v == "none") habit = false
-                                    }, label = { Text(label) })
-                                }
+                        androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(repeatOptions.size) { i ->
+                                val (v, label) = repeatOptions[i]
+                                FilterChip(repeatMode == v, {
+                                    repeatMode = v
+                                    if (v == "none") habit = false
+                                }, label = { Text(label) })
                             }
                         }
                         if (repeatMode == "custom") {
@@ -710,7 +706,7 @@ fun EditTaskScreen(store: AppStore, onDone: () -> Unit, onCancel: () -> Unit) {
                     Column(Modifier.padding(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("时间提醒", Modifier.weight(1f))
-                            Switch(remindOn) { remindOn = it; if (it && remindDate == null) remindDate = startDate }
+                            Switch(remindOn, { remindOn = it; if (it && remindDate == null) remindDate = startDate })
                         }
                         if (remindOn) Row { DateField("日期", remindDate, { remindDate = it }); TimeField("时间", remindTime, { remindTime = it?.take(5) }) }
                     }

@@ -6,10 +6,11 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /** 应用级状态容器：授权、云端、业务仓库、刷新与错误提示。 */
-class AppStore(context: Context) {
+class AppStore(private val context: Context) {
     val auth = AuthManager(context.applicationContext)
     val cloud = BiandanCloud(auth)
     val repo = Repository(cloud)
+    val reminders by lazy { com.biandan.app.notify.ReminderScheduler(context.applicationContext) }
 
     val signedIn = MutableStateFlow(auth.isSignedIn)
     val syncing = MutableStateFlow(false)
@@ -38,6 +39,7 @@ class AppStore(context: Context) {
             try {
                 repo.refreshAll()
                 lists.value = repo.listLists()
+                runCatching { reminders.reschedule(repo) }
             } finally {
                 syncing.value = false
             }

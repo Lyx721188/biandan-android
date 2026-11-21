@@ -3,6 +3,7 @@ package com.biandan.app.data
 import com.biandan.app.data.Recurrence.occurrenceId
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -419,8 +420,11 @@ class Repository(
                 now.toLocalDate().toString() to now.format(DateTimeFormatter.ofPattern("HH:mm:ss"))
             }
             chosen = instances.filter { row ->
-                (row.attributes.int("isFinish") ?: 0) == 0 &&
-                    ((row.attributes.str("startTime") ?: "") to (row.attributes.str("validStartTime") ?: "")) >= start
+                (row.attributes.int("isFinish") ?: 0) == 0 && run {
+                    val d = row.attributes.str("startTime") ?: ""
+                    val t = row.attributes.str("validStartTime") ?: ""
+                    d > start.first || (d == start.first && t >= start.second)
+                }
             }
             deleteParent = chosen.isNotEmpty() && chosen.size == instances.size
         }
@@ -494,10 +498,10 @@ class Repository(
     /** 按实例业务 id 取实例视图（详情页按实例进入时用）。 */
     suspend fun getOccurrenceView(occurrenceId: String, today: LocalDate = LocalDate.now()): OccurrenceView {
         val rows = records("showTask")
-        val rec = find("showTask", "taskId", occurrenceId, rows)
+        val rec = find("showTask", "id2", occurrenceId, rows)
             ?: throw ToolError("找不到记录：$occurrenceId")
-        val parent = find("Task", "taskId", rec["parentId"].orEmpty(), rows, required = false)
-        return occurrenceView(rec, parent, today)
+        val parent = find("Task", "id1", rec.attributes["id1"].toString().trim('"'), rows)
+        return occurrenceView(rec, parent)
     }
 
     suspend fun getTask(taskId: String): TaskView =
@@ -590,7 +594,7 @@ class Repository(
             if (matches) items += item
         }
         val sortField: (OccurrenceView) -> String = if (status == "completed")
-            { it.completedAt ?: "" } else { it.startDate ?: "" }
+            ({ it.completedAt ?: "" }) else ({ it.startDate ?: "" })
         items.sortWith(compareBy({ sortField(it) }, { it.startTime ?: "" }, { it.occurrenceId }))
         val page = pageResult(items, limit, offset)
         val summaryMap = if (includeSummary) mapOf(
@@ -608,7 +612,9 @@ class Repository(
         val end = if (endDate != null) calendarDate(endDate) else start
         val first = if (startTime != null) clockTime(startTime) else "00:00:00"
         val last = if (endTime != null) clockTime(endTime) else "23:59:00"
-        if (start to first > end to last) throw ToolError("The end of the task cannot be earlier than its start.")
+        if (start > end || (start == end && first > last)) {
+            throw ToolError("The end of the task cannot be earlier than its start.")
+        }
         return mapOf("startTime" to start, "endTime" to end, "validStartTime" to first, "validEndTime" to last)
     }
 
@@ -819,7 +825,7 @@ class Repository(
             if (listOf(name, latitude, longitude, remind).any { it != null }) {
                 throw ToolError("clear cannot be combined with location or reminder values.")
             }
-            return mapOf("location" to "", "latitude" to -1, "longitude" to -1, "isRemind" to flags and 2.inv())
+            return mapOf("location" to "", "latitude" to -1, "longitude" to -1, "isRemind" to (flags and 2.inv()))
         }
         if (listOf(name, latitude, longitude, remind).all { it == null }) {
             throw ToolError("Provide a location, coordinates or reminder setting.")
@@ -1017,7 +1023,7 @@ class Repository(
             "eventId" to -1, "eventType" to -1, "eventTitle" to title.trim(),
         )
         if (occurrenceId != null) {
-            val linked = getOccurrence(occurrenceId).task
+            val linked = getOccurrence(occurrenceId).first
             logData["eventId"] = occurrenceId.toLong()
             logData["eventType"] = linked.listId.toLong()
             logData["eventTitle"] = title.trim().ifEmpty { linked.title }

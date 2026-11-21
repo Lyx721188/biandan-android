@@ -46,6 +46,7 @@ import java.util.Locale
 
 private val FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DateField(label: String, value: String?, onChange: (String?) -> Unit, modifier: Modifier = Modifier) {
     var open by remember { mutableStateOf(false) }
