@@ -21,12 +21,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -303,13 +307,14 @@ fun TasksScreen(store: AppStore, onOpenTask: (String) -> Unit, onAdd: () -> Unit
     var listId by remember { mutableStateOf<String?>(null) }
     var showDone by remember { mutableStateOf(false) }
     var page by remember { mutableStateOf<Repository.Page<TaskView>?>(null) }
+    var failed by remember { mutableStateOf(false) }
     val lists by store.lists.collectAsState()
     val syncing by store.syncing.collectAsState()
 
     val filters = listOf("全部", "重要", "紧急", "循环", "习惯", "收藏")
     fun load() {
         scope.launch {
-            page = store.run {
+            val result = store.run {
                 store.repo.searchTasks(
                     query = query, listId = listId,
                     important = if (filterIndex == 1) true else null,
@@ -321,6 +326,8 @@ fun TasksScreen(store: AppStore, onOpenTask: (String) -> Unit, onAdd: () -> Unit
                     limit = 100,
                 )
             }
+            if (result != null) { page = result; failed = false }
+            else failed = true
         }
     }
     LaunchedEffect(query, filterIndex, listId, showDone, syncing) { if (!syncing) load() }
@@ -365,9 +372,20 @@ fun TasksScreen(store: AppStore, onOpenTask: (String) -> Unit, onAdd: () -> Unit
             }
             val p = page
             LazyColumn(Modifier.fillMaxSize()) {
-                if (p == null) {
+                if (p == null && !failed) {
                     item { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
-                } else if (p.items.isEmpty()) {
+                } else if (failed) {
+                    item {
+                        Column(
+                            Modifier.fillMaxWidth().padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            EmptyHint("加载失败，请检查网络后重试")
+                            Spacer(Modifier.height(8.dp))
+                            Button(onClick = { failed = false; page = null; load() }) { Text("重试") }
+                        }
+                    }
+                } else if (p == null || p.items.isEmpty()) {
                     item { EmptyHint("没有匹配的任务") }
                 } else {
                     items(p.items, key = { it.taskId }) { task ->
@@ -765,6 +783,41 @@ private fun FocusRow(f: FocusView, onDelete: () -> Unit) {
         }
     }
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+}
+
+// ---------- 更多（二级入口） ----------
+
+@Composable
+fun MoreScreen(onNavigate: (String) -> Unit) {
+    data class Entry(val route: String, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val desc: String)
+    val entries = listOf(
+        Entry("lists", "清单", Icons.Default.List, "管理任务清单与配色"),
+        Entry("habits", "习惯", Icons.Default.CheckCircle, "每日打卡与坚持记录"),
+        Entry("focus", "专注", Icons.Default.PlayArrow, "番茄钟与专注日志"),
+        Entry("settings", "设置", Icons.Default.Settings, "账号、排程与同步"),
+    )
+    LazyColumn(Modifier.fillMaxSize()) {
+        item {
+            Text("更多", Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        }
+        items(entries) { e ->
+            Row(
+                Modifier.fillMaxWidth().clickable { onNavigate(e.route) }
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(e.icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(16.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(e.label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                    Text(e.desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                }
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+        }
+    }
 }
 
 // ---------- 设置 ----------

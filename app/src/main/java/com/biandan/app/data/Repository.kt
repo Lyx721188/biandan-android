@@ -234,7 +234,7 @@ class Repository(
 
     // ---------- 待办单 favorites ----------
 
-    suspend fun listLists(): List<ListView> = cacheLock.withLock {
+    suspend fun listLists(): List<ListView> {
         val rows = records("favorites")
         val lists = rows.map { row ->
             val color = row.attributes.int("favoritesColor") ?: 0
@@ -500,7 +500,7 @@ class Repository(
         val rows = records("showTask")
         val rec = find("showTask", "id2", occurrenceId, rows)
             ?: throw ToolError("找不到记录：$occurrenceId")
-        val parent = find("Task", "id1", rec.attributes["id1"].toString().trim('"'), rows)!!
+        val parent = find("Task", "id1", rec.attributes["id1"].toString().trim('"'))!!
         return occurrenceView(rec, parent)
     }
 

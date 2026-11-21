@@ -4,10 +4,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Face
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -38,11 +35,11 @@ private data class Tab(val route: String, val label: String, val icon: androidx.
 private val TABS = listOf(
     Tab("today", "今日", Icons.Default.DateRange),
     Tab("tasks", "任务", Icons.Default.Star),
-    Tab("lists", "清单", Icons.Default.List),
-    Tab("habits", "习惯", Icons.Default.Favorite),
-    Tab("focus", "专注", Icons.Default.Face),
-    Tab("settings", "设置", Icons.Default.Settings),
+    Tab("more", "更多", Icons.Default.Menu),
 )
+
+// 二级页面：从「更多」进入，底栏保持可见且高亮「更多」
+private val SECONDARY_ROUTES = setOf("lists", "habits", "focus", "settings")
 
 @Composable
 fun AppRoot(store: AppStore) {
@@ -90,11 +87,12 @@ fun AppRoot(store: AppStore) {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
-            if (currentRoute in TABS.map { it.route }) {
+            if (currentRoute in TABS.map { it.route } + SECONDARY_ROUTES) {
                 NavigationBar {
                     for (tab in TABS) {
                         NavigationBarItem(
-                            selected = currentRoute == tab.route,
+                            selected = currentRoute == tab.route ||
+                                (tab.route == "more" && currentRoute in SECONDARY_ROUTES),
                             onClick = {
                                 nav.navigate(tab.route) {
                                     popUpTo(nav.graph.findStartDestination().id) { saveState = true }
@@ -117,6 +115,7 @@ fun AppRoot(store: AppStore) {
         ) {
             composable("today") { TodayScreen(store, ::openOccurrence) { nav.navigate("new") } }
             composable("tasks") { TasksScreen(store, ::openTask) { nav.navigate("new") } }
+            composable("more") { MoreScreen { route -> nav.navigate(route) } }
             composable("lists") { ListsScreen(store) { nav.navigate("list/$it") } }
             composable("habits") { HabitsScreen(store, ::openTask) }
             composable("focus") { FocusScreen(store) }
