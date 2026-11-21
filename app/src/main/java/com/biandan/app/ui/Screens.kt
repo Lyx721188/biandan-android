@@ -1,6 +1,7 @@
 package com.biandan.app.ui
 
 import android.app.Activity
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -55,6 +57,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -151,16 +155,32 @@ fun TodayScreen(store: AppStore, onOpenOccurrence: (String) -> Unit, onAdd: () -
     }
     LaunchedEffect(selected, syncing) { if (!syncing) load() }
 
+    val pending = items.filter { it.status == "pending" }
+    val finished = items.filter { it.status != "pending" }
+
     Box(Modifier.fillMaxSize()) {
         PullToRefreshBox(isRefreshing = syncing, onRefresh = {
             scope.launch { store.run { store.refresh() } }
         }) {
             LazyColumn(Modifier.fillMaxSize()) {
                 item {
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                        Text(
+                            if (selected == LocalDate.now()) "今天" else
+                                selected.format(DateTimeFormatter.ofPattern("M月d日", Locale.CHINA)),
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            selected.format(DateTimeFormatter.ofPattern("M月d日 EEEE", Locale.CHINA)),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.outline,
+                        )
+                    }
                     WeekStrip(selected) { selected = it }
                 }
                 if (overdue.isNotEmpty()) {
-                    item { SectionHeader("已逾期 ${overdue.size}") }
+                    item { SectionHeader("已逾期", overdue.size, MaterialTheme.colorScheme.error) }
                     items(overdue, key = { "o" + it.occurrenceId }) { occ ->
                         OccurrenceRow(occ,
                             onClick = { onOpenOccurrence(occ.occurrenceId) },
@@ -176,13 +196,13 @@ fun TodayScreen(store: AppStore, onOpenOccurrence: (String) -> Unit, onAdd: () -
                             listColor = listMeta[occ.listId]?.color ?: 0)
                     }
                 }
-                item { SectionHeader(selected.format(DateTimeFormatter.ofPattern("M月d日 EEEE", Locale.CHINA))) }
+                item { SectionHeader("待办", pending.size) }
                 if (loading) {
                     item { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
                 } else if (items.isEmpty()) {
                     item { EmptyHint("这一天没有安排") }
                 } else {
-                    items(items, key = { it.occurrenceId }) { occ ->
+                    items(pending, key = { it.occurrenceId }) { occ ->
                         OccurrenceRow(occ,
                             onClick = { onOpenOccurrence(occ.occurrenceId) },
                             onToggle = {
@@ -196,7 +216,23 @@ fun TodayScreen(store: AppStore, onOpenOccurrence: (String) -> Unit, onAdd: () -
                             listName = listMeta[occ.listId]?.name ?: "",
                             listColor = listMeta[occ.listId]?.color ?: 0)
                     }
+                    if (finished.isNotEmpty()) {
+                        item { SectionHeader("已完成", finished.size, MaterialTheme.colorScheme.outline) }
+                        items(finished, key = { "d" + it.occurrenceId }) { occ ->
+                            OccurrenceRow(occ,
+                                onClick = { onOpenOccurrence(occ.occurrenceId) },
+                                onToggle = {
+                                    scope.launch {
+                                        store.run { store.repo.changeProgress(occ.occurrenceId, "reopen") }
+                                        load()
+                                    }
+                                },
+                                listName = listMeta[occ.listId]?.name ?: "",
+                                listColor = listMeta[occ.listId]?.color ?: 0)
+                        }
+                    }
                 }
+                item { Spacer(Modifier.height(80.dp)) }
             }
         }
         FloatingActionButton(
@@ -229,27 +265,28 @@ fun WeekStrip(selected: LocalDate, onSelect: (LocalDate) -> Unit) {
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline,
                 )
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = when {
-                            sel -> MaterialTheme.colorScheme.primary
-                            isToday -> MaterialTheme.colorScheme.primaryContainer
-                            else -> MaterialTheme.colorScheme.surfaceContainerLow
-                        }
-                    ),
-                    shape = RoundedCornerShape(10.dp),
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(
+                            when {
+                                sel -> MaterialTheme.colorScheme.primary
+                                isToday -> MaterialTheme.colorScheme.primaryContainer
+                                else -> Color.Transparent
+                            }
+                        ),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
-                        Text(
-                            day.dayOfMonth.toString(),
-                            fontWeight = if (sel || isToday) FontWeight.Bold else FontWeight.Normal,
-                            color = when {
-                                sel -> MaterialTheme.colorScheme.onPrimary
-                                isToday -> MaterialTheme.colorScheme.onPrimaryContainer
-                                else -> MaterialTheme.colorScheme.onSurface
-                            },
-                        )
-                    }
+                    Text(
+                        day.dayOfMonth.toString(),
+                        fontWeight = if (sel || isToday) FontWeight.Bold else FontWeight.Normal,
+                        color = when {
+                            sel -> MaterialTheme.colorScheme.onPrimary
+                            isToday -> MaterialTheme.colorScheme.onPrimaryContainer
+                            else -> MaterialTheme.colorScheme.onSurface
+                        },
+                    )
                 }
             }
         }

@@ -1,6 +1,7 @@
 package com.biandan.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,13 +14,21 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -35,8 +44,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.biandan.app.data.OccurrenceView
 import com.biandan.app.data.TaskView
@@ -111,6 +122,39 @@ fun TimeField(label: String, value: String?, onChange: (String?) -> Unit, modifi
     }
 }
 
+/** Todoist 式圆形勾选框：待办=空心圆，完成=实心+对勾，放弃=灰色对勾。 */
+@Composable
+fun CircleCheck(done: Boolean, abandoned: Boolean = false, onClick: () -> Unit) {
+    val border = when {
+        done -> MaterialTheme.colorScheme.primary
+        abandoned -> MaterialTheme.colorScheme.outline
+        else -> MaterialTheme.colorScheme.outline
+    }
+    Box(
+        modifier = Modifier
+            .size(24.dp)
+            .clip(CircleShape)
+            .background(if (done || abandoned) border else Color.Transparent)
+            .border(1.5.dp, border, CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (done || abandoned) {
+            Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.surface, modifier = Modifier.size(15.dp))
+        }
+    }
+}
+
+@Composable
+fun MetaIcon(icon: ImageVector, text: String, color: Color = MaterialTheme.colorScheme.outline) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = color, modifier = Modifier.size(13.dp))
+        Spacer(Modifier.width(3.dp))
+        Text(text, style = MaterialTheme.typography.labelSmall, color = color)
+    }
+}
+
+/** 实例行：圆卡 + 圆勾 + 标题 + 元数据行（Todoist/ClickUp 式）。 */
 @Composable
 fun OccurrenceRow(
     occ: OccurrenceView,
@@ -120,65 +164,87 @@ fun OccurrenceRow(
     listName: String = "",
     listColor: Int = 0,
 ) {
-    val done = occ.status != "pending"
+    val done = occ.status == "completed"
+    val abandoned = occ.status == "abandoned"
     val timed = occ.startTime != "00:00:00" || occ.endTime != "23:59:00"
-    Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        onClick = onClick,
     ) {
-        Checkbox(checked = done, onCheckedChange = { onToggle() })
-        Column(Modifier.weight(1f)) {
-            Text(
-                occ.title,
-                style = MaterialTheme.typography.bodyLarge,
-                textDecoration = if (done) TextDecoration.LineThrough else null,
-                color = if (done) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface,
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (timed && occ.startTime != null && occ.endTime != null) {
-                    Text(
-                        "${occ.startTime.take(5)}–${occ.endTime.take(5)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline,
-                    )
+        Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            CircleCheck(done, abandoned, onClick = onToggle)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    occ.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    textDecoration = if (done) TextDecoration.LineThrough else null,
+                    color = when {
+                        done -> MaterialTheme.colorScheme.outline
+                        abandoned -> MaterialTheme.colorScheme.outline
+                        else -> MaterialTheme.colorScheme.onSurface
+                    },
+                )
+                val meta = buildList<@Composable () -> Unit> {
+                    if (timed && occ.startTime != null && occ.endTime != null) {
+                        add { MetaIcon(Icons.Default.DateRange, "${occ.startTime.take(5)}–${occ.endTime.take(5)}") }
+                    }
+                    if (listName.isNotEmpty()) {
+                        add {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.size(7.dp).clip(CircleShape).background(ListPalette.color(listColor)))
+                                Spacer(Modifier.width(4.dp))
+                                Text(listName, style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline)
+                            }
+                        }
+                    }
+                    if (occ.hasTimeReminder) {
+                        add { MetaIcon(Icons.Default.Notifications, "提醒") }
+                    }
+                    if (occ.hasLocationReminder) {
+                        add { MetaIcon(Icons.Default.Place, "地点") }
+                    }
                 }
-                if (listName.isNotEmpty()) {
-                    Text(listName, style = MaterialTheme.typography.bodySmall, color = ListPalette.color(listColor))
-                }
-                if (occ.important) {
-                    Text("重要", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                }
-                if (occ.urgent) {
-                    Text("紧急", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
-                }
-                if (occ.isHabit) {
-                    Text("习惯", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
-                }
-                if (occ.targetCount > 1 || occ.completedSubtaskIndices.isNotEmpty()) {
-                    Text(
-                        "${occ.completedCount}/${maxOf(occ.targetCount, occ.subtaskTitles.size)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
+                if (meta.isNotEmpty() || occ.isHabit || occ.targetCount > 1 || occ.completedSubtaskIndices.isNotEmpty()) {
+                    Spacer(Modifier.height(4.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        meta.forEach { it() }
+                        if (occ.important) Text("重要", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                        if (occ.urgent) Text("紧急", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
+                        if (occ.isHabit) Text("习惯", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                        if (occ.targetCount > 1 || occ.completedSubtaskIndices.isNotEmpty()) {
+                            Text(
+                                "${occ.completedCount}/${maxOf(occ.targetCount, occ.subtaskTitles.size)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
                 }
             }
-        }
-        if (onCheck != null && !done) {
-            TextButton(onClick = onCheck) { Text("打卡") }
+            if (onCheck != null && !done && !abandoned) {
+                TextButton(onClick = onCheck) { Text("打卡") }
+            }
         }
     }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 }
 
+/** 分区标题（带计数）。 */
 @Composable
-fun SectionHeader(text: String) {
-    Text(
-        text,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-        fontWeight = FontWeight.Bold,
-    )
+fun SectionHeader(text: String, count: Int? = null, color: Color = MaterialTheme.colorScheme.primary) {
+    Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(text, style = MaterialTheme.typography.labelLarge, color = color, fontWeight = FontWeight.Bold)
+        if (count != null) {
+            Spacer(Modifier.width(6.dp))
+            Text("$count", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.outline)
+        }
+    }
 }
 
 @Composable
@@ -219,39 +285,43 @@ private fun ColorDot(color: Color, selected: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** 任务一行（列表/搜索结果页用） */
+/** 任务行（搜索/列表页）：卡式 + 标题 + 元数据行。 */
 @Composable
 fun TaskRow(task: TaskView, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        onClick = onClick,
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(task.title, style = MaterialTheme.typography.bodyLarge)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+            Text(
+                task.title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textDecoration = if (task.completed) TextDecoration.LineThrough else null,
+                color = if (task.completed) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 val window = buildString {
-                    if (task.startDate != null) append(task.startDate)
-                    if (task.endDate != null) {
-                        if (isNotEmpty()) append(" → ") else append("至 ")
-                        append(task.endDate)
+                    if (task.undated) append("无日期")
+                    else {
+                        task.startDate?.let { append(it) }
+                        if (task.endDate != null) append(" → ${task.endDate}")
                     }
                 }
-                if (window.isNotEmpty()) {
-                    Text(window, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
-                }
+                MetaIcon(Icons.Default.DateRange, window)
                 if (task.recurrence != null) {
-                    Text(describeRule(task.recurrence), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    MetaIcon(Icons.Default.Refresh, describeRule(task.recurrence), MaterialTheme.colorScheme.primary)
                 }
-                if (task.isHabit) {
-                    Text("习惯", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
-                }
-                if (task.completed) {
-                    Text("已完成", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
-                }
+                if (task.isHabit) Text("习惯", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                if (task.important) Text("重要", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                if (task.completed) Text("已完成", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
             }
         }
     }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 }
 
 @Composable

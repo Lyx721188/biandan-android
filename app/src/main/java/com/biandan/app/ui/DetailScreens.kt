@@ -15,13 +15,24 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -49,6 +60,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.biandan.app.data.AppStore
 import com.biandan.app.data.OccurrenceView
@@ -96,155 +108,249 @@ fun TaskDetailScreen(
             }
             else -> {
                 val (task, occ) = p
-                LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                val done = occ.status == "completed"
+                var showEdit by remember { mutableStateOf(false) }
+                var showReschedule by remember { mutableStateOf(false) }
+                var showMove by remember { mutableStateOf(false) }
+                var showReminder by remember { mutableStateOf(false) }
+                var showLocation by remember { mutableStateOf(false) }
+                var showDelete by remember { mutableStateOf(false) }
+                LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // 头部：圆勾 + 标题 + 备注（Todoist 式）
                     item {
-                        Text(task.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                        if (task.remark.isNotEmpty()) {
-                            Text(task.remark, style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.outline)
+                        Row(
+                            Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.Top,
+                        ) {
+                            CircleCheck(done, occ.status == "abandoned") {
+                                scope.launch {
+                                    store.run {
+                                        if (done) store.repo.changeProgress(occ.occurrenceId, "reopen")
+                                        else if (occ.status == "pending") store.repo.completeOccurrence(occ.occurrenceId)
+                                        else store.repo.changeProgress(occ.occurrenceId, "restore")
+                                    }; load()
+                                }
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    task.title,
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    textDecoration = if (done) TextDecoration.LineThrough else null,
+                                    color = if (done) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface,
+                                )
+                                if (task.remark.isNotEmpty()) {
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(task.remark, style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.outline)
+                                }
+                            }
                         }
                     }
+                    // 元数据卡：图标行
                     item {
-                        Card {
-                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                MetaRow("清单", lists.firstOrNull { it.listId == task.listId }?.name ?: task.listId)
-                                MetaRow("状态", statusLabel(occ.status) + if (task.completed) "（任务已全部完成）" else "")
-                                if (task.undated) MetaRow("排程", "无日期")
-                                else MetaRow("日期", "${occ.startDate} → ${occ.endDate}")
+                        Card(
+                            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                        ) {
+                            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                val listColor = ListPalette.color(lists.firstOrNull { it.listId == task.listId }?.color ?: 0)
+                                MetaLine(Icons.Default.List, listColor,
+                                    lists.firstOrNull { it.listId == task.listId }?.name ?: "未分类")
+                                MetaLine(Icons.Default.Info, MaterialTheme.colorScheme.outline,
+                                    statusLabel(occ.status) + if (task.completed) "（系列已全部完成）" else "")
+                                MetaLine(Icons.Default.DateRange, MaterialTheme.colorScheme.primary,
+                                    if (task.undated) "无日期" else "${occ.startDate} → ${occ.endDate}")
                                 if (occ.startTime != "00:00:00" || occ.endTime != "23:59:00") {
-                                    MetaRow("时段", "${occ.startTime?.take(5)} – ${occ.endTime?.take(5)}")
+                                    MetaLine(Icons.Default.Refresh, MaterialTheme.colorScheme.primary,
+                                        "${occ.startTime?.take(5)} – ${occ.endTime?.take(5)}")
                                 }
-                                if (task.recurrence != null) MetaRow("重复", describeRule(task.recurrence) + if (task.isHabit) " · 习惯" else "")
+                                if (task.recurrence != null) {
+                                    MetaLine(Icons.Default.Refresh, MaterialTheme.colorScheme.primary,
+                                        describeRule(task.recurrence) + if (task.isHabit) " · 习惯" else "")
+                                }
                                 if (task.timeReminder != null) {
-                                    MetaRow("提醒", "${task.timeReminder.date ?: ""} ${task.timeReminder.time?.take(5) ?: ""}")
+                                    MetaLine(Icons.Default.Notifications, MaterialTheme.colorScheme.tertiary,
+                                        "${task.timeReminder.date ?: ""} ${task.timeReminder.time?.take(5) ?: ""}")
                                 }
                                 task.location?.let { loc ->
-                                    MetaRow("地点", loc.name + if (task.hasLocationReminder) "（到达提醒）" else "")
+                                    MetaLine(Icons.Default.Place, MaterialTheme.colorScheme.tertiary,
+                                        loc.name + if (task.hasLocationReminder) "（到达提醒）" else "")
                                 }
-                                MetaRow("标记", buildList {
+                                val flags = buildList {
                                     if (task.important) add("重要")
                                     if (task.urgent) add("紧急")
                                     if (task.collected) add("已收藏")
-                                }.joinToString("、").ifEmpty { "无" })
-                            }
-                        }
-                    }
-                    // 子任务 / 目标
-                    if (task.subtasks.isNotEmpty()) {
-                        item { Text("子任务", fontWeight = FontWeight.Bold) }
-                        itemsIndexed(task.subtasks) { i, title ->
-                            val checked = i in occ.completedSubtaskIndices
-                            Row(
-                                Modifier.fillMaxWidth().clickable(enabled = occ.status == "pending") {
-                                    scope.launch {
-                                        store.run {
-                                            if (checked) store.repo.changeProgress(occ.occurrenceId, "uncheck_subtask", subtaskIndex = i)
-                                            else store.repo.completeSubtask(occ.occurrenceId, i)
-                                        }; load()
-                                    }
-                                }.padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Checkbox(checked, onCheckedChange = null, enabled = occ.status == "pending")
-                                Text(title, color = if (checked) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface)
-                            }
-                        }
-                    } else if (task.targetCount > 1 && occ.status == "pending") {
-                        item {
-                            Card {
-                                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Text("进度", Modifier.weight(1f))
-                                    TextButton(onClick = {
-                                        scope.launch {
-                                            store.run {
-                                                store.repo.changeProgress(occ.occurrenceId, "set_count",
-                                                    count = (occ.completedCount - 1).coerceAtLeast(0))
-                                            }; load()
-                                        }
-                                    }) { Text("−") }
-                                    Text("${occ.completedCount} / ${occ.targetCount}", style = MaterialTheme.typography.titleMedium)
-                                    TextButton(onClick = {
-                                        scope.launch {
-                                            store.run {
-                                                store.repo.changeProgress(occ.occurrenceId, "set_count",
-                                                    count = (occ.completedCount + 1).coerceAtMost(occ.targetCount))
-                                            }; load()
-                                        }
-                                    }) { Text("+") }
+                                }
+                                if (flags.isNotEmpty()) {
+                                    MetaLine(Icons.Default.Star, MaterialTheme.colorScheme.error, flags.joinToString("、"))
                                 }
                             }
                         }
                     }
-                    // 操作
+                    // 动作 chips
                     item {
-                        Text("操作", fontWeight = FontWeight.Bold)
-                        ActionButtons(store, task, occ,
-                            reload = { load() }, onDeleted = onDeleted, scope = scope)
+                        Row(
+                            Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            AssistChip(onClick = { showEdit = true }, label = { Text("编辑") },
+                                leadingIcon = { Icon(Icons.Default.Edit, null, Modifier.size(16.dp)) })
+                            if (occ.status == "pending") {
+                                AssistChip(onClick = { showReschedule = true }, label = { Text("改期") },
+                                    leadingIcon = { Icon(Icons.Default.DateRange, null, Modifier.size(16.dp)) })
+                            }
+                            AssistChip(onClick = { showMove = true }, label = { Text("移动") })
+                            AssistChip(onClick = { showReminder = true }, label = { Text("提醒") },
+                                leadingIcon = { Icon(Icons.Default.Notifications, null, Modifier.size(16.dp)) })
+                            AssistChip(onClick = { showLocation = true }, label = { Text("地点") },
+                                leadingIcon = { Icon(Icons.Default.Place, null, Modifier.size(16.dp)) })
+                        }
                     }
-                    item { Spacer(Modifier.height(32.dp)) }
+                    // 子任务区
+                    if (task.subtasks.isNotEmpty()) {
+                        item {
+                            Row(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                                Text("子任务", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    "${occ.completedSubtaskIndices.size}/${task.subtasks.size}",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.outline,
+                                )
+                            }
+                        }
+                        itemsIndexed(task.subtasks) { i, title ->
+                            val checked = i in occ.completedSubtaskIndices
+                            Row(
+                                Modifier.fillMaxWidth()
+                                    .clickable(enabled = occ.status == "pending") {
+                                        scope.launch {
+                                            store.run {
+                                                if (checked) store.repo.changeProgress(occ.occurrenceId, "uncheck_subtask", subtaskIndex = i)
+                                                else store.repo.completeSubtask(occ.occurrenceId, i)
+                                            }; load()
+                                        }
+                                    }
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                CircleCheck(checked) {}
+                                Spacer(Modifier.width(12.dp))
+                                Text(
+                                    title,
+                                    textDecoration = if (checked) TextDecoration.LineThrough else null,
+                                    color = if (checked) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
+                        }
+                    } else if (task.targetCount > 1) {
+                        item {
+                            Card(
+                                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                            ) {
+                                Column(Modifier.padding(14.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text("进度", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                                        Text("${occ.completedCount} / ${occ.targetCount}",
+                                            style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                    }
+                                    androidx.compose.material3.LinearProgressIndicator(
+                                        progress = { (occ.completedCount.toFloat() / occ.targetCount).coerceIn(0f, 1f) },
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                    )
+                                    if (occ.status == "pending") {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            OutlinedButton(onClick = {
+                                                scope.launch {
+                                                    store.run {
+                                                        store.repo.changeProgress(occ.occurrenceId, "set_count",
+                                                            count = (occ.completedCount - 1).coerceAtLeast(0))
+                                                    }; load()
+                                                }
+                                            }) { Text("−1") }
+                                            OutlinedButton(onClick = {
+                                                scope.launch {
+                                                    store.run {
+                                                        store.repo.changeProgress(occ.occurrenceId, "set_count",
+                                                            count = (occ.completedCount + 1).coerceAtMost(occ.targetCount))
+                                                    }; load()
+                                                }
+                                            }) { Text("+1") }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // 底部主操作 + 删除
+                    item {
+                        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            when (occ.status) {
+                                "pending" -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Button(onClick = {
+                                        scope.launch { store.run { store.repo.completeOccurrence(occ.occurrenceId) }; load() }
+                                    }, modifier = Modifier.weight(1f)) { Text("完成") }
+                                    OutlinedButton(onClick = {
+                                        scope.launch { store.run { store.repo.changeProgress(occ.occurrenceId, "abandon") }; load() }
+                                    }) { Text("放弃") }
+                                }
+                                "completed" -> OutlinedButton(onClick = {
+                                    scope.launch { store.run { store.repo.changeProgress(occ.occurrenceId, "reopen") }; load() }
+                                }, modifier = Modifier.fillMaxWidth()) { Text("重新打开") }
+                                "abandoned" -> OutlinedButton(onClick = {
+                                    scope.launch { store.run { store.repo.changeProgress(occ.occurrenceId, "restore") }; load() }
+                                }, modifier = Modifier.fillMaxWidth()) { Text("恢复待办") }
+                            }
+                            TextButton(
+                                onClick = { showDelete = true },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { Text("删除任务", color = MaterialTheme.colorScheme.error) }
+                        }
+                    }
+                    item { Spacer(Modifier.height(40.dp)) }
                 }
+                DetailDialogs(
+                    store, task, occ, scope,
+                    reload = { load() }, onDeleted = onDeleted,
+                    showEdit = showEdit, onEditChange = { showEdit = it },
+                    showReschedule = showReschedule, onRescheduleChange = { showReschedule = it },
+                    showMove = showMove, onMoveChange = { showMove = it },
+                    showReminder = showReminder, onReminderChange = { showReminder = it },
+                    showLocation = showLocation, onLocationChange = { showLocation = it },
+                    showDelete = showDelete, onDeleteChange = { showDelete = it },
+                )
             }
         }
     }
 }
 
 @Composable
-private fun MetaRow(label: String, value: String) {
-    Row {
-        Text(label, Modifier.width(56.dp), color = MaterialTheme.colorScheme.outline,
-            style = MaterialTheme.typography.bodyMedium)
-        Text(value, style = MaterialTheme.typography.bodyMedium)
+private fun MetaLine(icon: androidx.compose.ui.graphics.vector.ImageVector, tint: androidx.compose.ui.graphics.Color, text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = tint, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(10.dp))
+        Text(text, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
 @Composable
-private fun ActionButtons(
+private fun DetailDialogs(
     store: AppStore, task: TaskView, occ: OccurrenceView,
-    reload: () -> Unit, onDeleted: () -> Unit,
     scope: kotlinx.coroutines.CoroutineScope,
+    reload: () -> Unit, onDeleted: () -> Unit,
+    showEdit: Boolean, onEditChange: (Boolean) -> Unit,
+    showReschedule: Boolean, onRescheduleChange: (Boolean) -> Unit,
+    showMove: Boolean, onMoveChange: (Boolean) -> Unit,
+    showReminder: Boolean, onReminderChange: (Boolean) -> Unit,
+    showLocation: Boolean, onLocationChange: (Boolean) -> Unit,
+    showDelete: Boolean, onDeleteChange: (Boolean) -> Unit,
 ) {
-    var showReschedule by remember { mutableStateOf(false) }
-    var showMove by remember { mutableStateOf(false) }
-    var showEdit by remember { mutableStateOf(false) }
-    var showDelete by remember { mutableStateOf(false) }
-    var showReminder by remember { mutableStateOf(false) }
-    var showLocation by remember { mutableStateOf(false) }
     val lists by store.lists.collectAsState()
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            when (occ.status) {
-                "pending" -> {
-                    Button(onClick = {
-                        scope.launch { store.run { store.repo.completeOccurrence(occ.occurrenceId) }; reload() }
-                    }) { Text("完成") }
-                    OutlinedButton(onClick = {
-                        scope.launch { store.run { store.repo.changeProgress(occ.occurrenceId, "abandon") }; reload() }
-                    }) { Text("放弃") }
-                }
-                "completed" -> OutlinedButton(onClick = {
-                    scope.launch { store.run { store.repo.changeProgress(occ.occurrenceId, "reopen") }; reload() }
-                }) { Text("重开") }
-                "abandoned" -> OutlinedButton(onClick = {
-                    scope.launch { store.run { store.repo.changeProgress(occ.occurrenceId, "restore") }; reload() }
-                }) { Text("恢复") }
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { showEdit = true }) { Text("编辑") }
-            if (occ.status == "pending") {
-                OutlinedButton(onClick = { showReschedule = true }) { Text("改期") }
-            }
-            OutlinedButton(onClick = { showMove = true }) { Text("移动清单") }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { showReminder = true }) { Text("提醒") }
-            OutlinedButton(onClick = { showLocation = true }) { Text("地点") }
-            OutlinedButton(onClick = { showDelete = true }) {
-                Text("删除", color = MaterialTheme.colorScheme.error)
-            }
-        }
-    }
 
     if (showReschedule) {
         var sd by remember { mutableStateOf(occ.startDate) }
@@ -252,7 +358,7 @@ private fun ActionButtons(
         var st by remember { mutableStateOf(occ.startTime?.take(5)) }
         var et by remember { mutableStateOf(occ.endTime?.take(5)) }
         AlertDialog(
-            onDismissRequest = { showReschedule = false },
+            onDismissRequest = { onRescheduleChange(false) },
             title = { Text("改期" + if (task.recurrence != null) "（仅此次，将脱离系列）" else "") },
             text = {
                 Column {
@@ -264,17 +370,17 @@ private fun ActionButtons(
                 TextButton(onClick = {
                     if (sd != null) scope.launch {
                         store.run { store.repo.rescheduleOccurrence(occ.occurrenceId, sd!!, ed, st, et) }
-                        showReschedule = false; reload()
+                        onRescheduleChange(false); reload()
                     }
                 }) { Text("保存") }
             },
-            dismissButton = { TextButton(onClick = { showReschedule = false }) { Text("取消") } },
+            dismissButton = { TextButton(onClick = { onRescheduleChange(false) }) { Text("取消") } },
         )
     }
 
     if (showMove) {
         AlertDialog(
-            onDismissRequest = { showMove = false },
+            onDismissRequest = { onMoveChange(false) },
             title = { Text("移动到其他清单") },
             text = {
                 Column {
@@ -284,7 +390,7 @@ private fun ActionButtons(
                             Modifier.fillMaxWidth().clickable {
                                 scope.launch {
                                     store.run { store.repo.moveTask(task.taskId, l.listId) }
-                                    showMove = false; reload()
+                                    onMoveChange(false); reload()
                                 }
                             }.padding(vertical = 12.dp),
                             color = ListPalette.color(l.color),
@@ -293,12 +399,12 @@ private fun ActionButtons(
                 }
             },
             confirmButton = {},
-            dismissButton = { TextButton(onClick = { showMove = false }) { Text("取消") } },
+            dismissButton = { TextButton(onClick = { onMoveChange(false) }) { Text("取消") } },
         )
     }
 
     if (showEdit) {
-        EditTaskDialog(store, task, onDone = { showEdit = false; reload() }, onCancel = { showEdit = false })
+        EditTaskDialog(store, task, onDone = { onEditChange(false); reload() }, onCancel = { onEditChange(false) })
     }
 
     if (showReminder) {
@@ -306,7 +412,7 @@ private fun ActionButtons(
         var rd by remember { mutableStateOf(task.timeReminder?.date ?: occ.startDate) }
         var rt by remember { mutableStateOf(task.timeReminder?.time?.take(5) ?: "09:00") }
         AlertDialog(
-            onDismissRequest = { showReminder = false },
+            onDismissRequest = { onReminderChange(false) },
             title = { Text("时间提醒") },
             text = {
                 Column {
@@ -323,11 +429,11 @@ private fun ActionButtons(
                             if (enabled) store.repo.setTimeReminder(task.taskId, rd, rt)
                             else store.repo.setTimeReminder(task.taskId, enabled = false)
                         }
-                        showReminder = false; reload()
+                        onReminderChange(false); reload()
                     }
                 }) { Text("保存") }
             },
-            dismissButton = { TextButton(onClick = { showReminder = false }) { Text("取消") } },
+            dismissButton = { TextButton(onClick = { onReminderChange(false) }) { Text("取消") } },
         )
     }
 
@@ -337,7 +443,7 @@ private fun ActionButtons(
         var lon by remember { mutableStateOf(task.location?.longitude?.takeIf { it != -1.0 }?.toString() ?: "") }
         var remind by remember { mutableStateOf(task.hasLocationReminder) }
         AlertDialog(
-            onDismissRequest = { showLocation = false },
+            onDismissRequest = { onLocationChange(false) },
             title = { Text("地点") },
             text = {
                 Column {
@@ -367,7 +473,7 @@ private fun ActionButtons(
                                 )
                             }
                         }
-                        showLocation = false; reload()
+                        onLocationChange(false); reload()
                     }
                 }) { Text("保存") }
             },
@@ -376,10 +482,10 @@ private fun ActionButtons(
                     TextButton(onClick = {
                         scope.launch {
                             store.run { store.repo.setLocation(task.taskId, clear = true) }
-                            showLocation = false; reload()
+                            onLocationChange(false); reload()
                         }
                     }) { Text("清除地点") }
-                    TextButton(onClick = { showLocation = false }) { Text("取消") }
+                    TextButton(onClick = { onLocationChange(false) }) { Text("取消") }
                 }
             },
         )
@@ -389,7 +495,7 @@ private fun ActionButtons(
         var scopeChoice by remember { mutableStateOf("series") }
         val repeating = task.recurrence != null || task.repeatType != 0
         AlertDialog(
-            onDismissRequest = { showDelete = false },
+            onDismissRequest = { onDeleteChange(false) },
             title = { Text("删除任务") },
             text = {
                 Column {
@@ -419,11 +525,11 @@ private fun ActionButtons(
                             )
                         }
                         store.run { store.refresh() }
-                        showDelete = false; onDeleted()
+                        onDeleteChange(false); onDeleted()
                     }
                 }) { Text("删除", color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = { showDelete = false }) { Text("取消") } },
+            dismissButton = { TextButton(onClick = { onDeleteChange(false) }) { Text("取消") } },
         )
     }
 }
